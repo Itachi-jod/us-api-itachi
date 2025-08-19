@@ -2,40 +2,48 @@ import { createCanvas, loadImage } from "@napi-rs/canvas";
 import axios from "axios";
 
 export default async function handler(req, res) {
-  const { avatar1, avatar2 } = req.query;
+  const { av1, av2 } = req.query;
 
-  if (!avatar1 || !avatar2) {
-    return res.status(400).json({ error: "Missing avatar1 or avatar2 URL" });
+  if (!av1 || !av2) {
+    return res.status(400).json({ error: "Missing avatar URLs. Use ?av1=URL&av2=URL" });
   }
 
   try {
-    // Load template (466x659 base image)
+    // Load template
     const template = await loadImage("https://i.ibb.co/YFJrLSpL/image.jpg");
 
-    // Load avatar 1
-    const avatar1Resp = await axios.get(avatar1, { responseType: "arraybuffer" });
-    const avatarImg1 = await loadImage(Buffer.from(avatar1Resp.data));
+    // Load avatars
+    const av1Resp = await axios.get(av1, { responseType: "arraybuffer" });
+    const av2Resp = await axios.get(av2, { responseType: "arraybuffer" });
+    const avatar1 = await loadImage(Buffer.from(av1Resp.data));
+    const avatar2 = await loadImage(Buffer.from(av2Resp.data));
 
-    // Load avatar 2
-    const avatar2Resp = await axios.get(avatar2, { responseType: "arraybuffer" });
-    const avatarImg2 = await loadImage(Buffer.from(avatar2Resp.data));
-
-    // Create canvas with template size
-    const canvas = createCanvas(466, 659);
+    // Canvas same size as template
+    const canvas = createCanvas(template.width, template.height);
     const ctx = canvas.getContext("2d");
 
-    // Draw background template
-    ctx.drawImage(template, 0, 0, 466, 659);
+    // Draw background
+    ctx.drawImage(template, 0, 0, template.width, template.height);
 
-    // === Position avatars inside template (from GoatBot cmd) ===
-    ctx.drawImage(avatarImg1, 150, 76, 110, 110);   // avatar1
-    ctx.drawImage(avatarImg2, 245, 305, 100, 100);  // avatar2
+    // === Circle helper function ===
+    const drawCircleImage = (img, x, y, size) => {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2, true);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(img, x, y, size, size);
+      ctx.restore();
+    };
+
+    // === Place avatars (adjust positions to match template) ===
+    drawCircleImage(avatar1, 150, 76, 110); // top person
+    drawCircleImage(avatar2, 245, 305, 100); // bottom person
 
     // Output image
     res.setHeader("Content-Type", "image/png");
     const buffer = await canvas.encode("png");
     return res.send(buffer);
-
   } catch (err) {
     console.error("Canvas error:", err);
     return res.status(500).json({ error: "Error generating image" });
